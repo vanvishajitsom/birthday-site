@@ -1,389 +1,173 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Confetti from "react-confetti";
-import { useWindowSize } from "@uidotdev/usehooks";
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  query,
+  orderBy,
+  serverTimestamp
+} from "firebase/firestore";
+
+import { db } from "./firebase";
 
 export default function Home() {
-  const { width, height } = useWindowSize();
-
-  const [page, setPage] = useState(1);
+  const [open, setOpen] = useState(false);
 
   const [name, setName] = useState("");
   const [wish, setWish] = useState("");
+  const [wishes, setWishes] = useState<any[]>([]);
 
-  const [wishes, setWishes] = useState<
-    { name: string; message: string }[]
-  >([]);
+  const [musicOn, setMusicOn] = useState(false);
 
-  const [showPopup, setShowPopup] =
-    useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const [popupName, setPopupName] =
-    useState("");
+  const [admin] = useState(true);
 
-  const [hearts, setHearts] =
-    useState(false);
-
-  const [musicOn, setMusicOn] =
-    useState(true);
-
-  const [cursor, setCursor] =
-    useState({ x: 0, y: 0 });
-
-  const [isAdmin, setIsAdmin] =
-    useState(false);
-
-  const audioRef =
-    useRef<HTMLAudioElement>(null);
-
-  // load wishes
+  /* 🌸 FIREBASE (FIXED CLEANUP) */
   useEffect(() => {
-    const saved =
-      localStorage.getItem(
-        "birthday-wishes"
+    const q = query(collection(db, "wishes"), orderBy("createdAt", "desc"));
+
+    const unsub = onSnapshot(q, (snap) => {
+      setWishes(
+        snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data()
+        }))
       );
+    });
 
-    if (saved) {
-      setWishes(JSON.parse(saved));
-    }
+    return () => unsub();
   }, []);
 
-  // admin mode
+  /* 🎵 MUSIC CONTROL (SAFE) */
   useEffect(() => {
-    if (
-      window.location.search.includes(
-        "admin=2205"
-      )
-    ) {
-      setIsAdmin(true);
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (musicOn) {
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
     }
-  }, []);
+  }, [musicOn]);
 
-  // autoplay music
-  useEffect(() => {
-    if (
-      page >= 2 &&
-      audioRef.current &&
-      musicOn
-    ) {
-      audioRef.current.play().catch(() => {});
-    }
-  }, [page, musicOn]);
+  /* 💌 SEND */
+  const submitWish = async () => {
+    if (!name || !wish) return;
 
-  // sparkle cursor
-  useEffect(() => {
-    const move = (e: MouseEvent) => {
-      setCursor({
-        x: e.clientX,
-        y: e.clientY,
-      });
-    };
-
-    window.addEventListener(
-      "mousemove",
-      move
-    );
-
-    return () =>
-      window.removeEventListener(
-        "mousemove",
-        move
-      );
-  }, []);
-
-  // submit wish
-  const submitWish = () => {
-    if (!name.trim() || !wish.trim())
-      return;
-
-    const newWish = {
+    await addDoc(collection(db, "wishes"), {
       name,
       message: wish,
-    };
-
-    const updated = [newWish, ...wishes];
-
-    setWishes(updated);
-
-    localStorage.setItem(
-      "birthday-wishes",
-      JSON.stringify(updated)
-    );
-
-    setPopupName(name);
+      createdAt: serverTimestamp()
+    });
 
     setName("");
     setWish("");
-
-    setShowPopup(true);
-    setHearts(true);
-
-    setTimeout(() => {
-      setShowPopup(false);
-      setHearts(false);
-
-      setPage(3);
-    }, 2500);
   };
 
-  // delete wish
-  const deleteWish = (
-    indexToDelete: number
-  ) => {
-    const updated = wishes.filter(
-      (_, index) =>
-        index !== indexToDelete
-    );
-
-    setWishes(updated);
-
-    localStorage.setItem(
-      "birthday-wishes",
-      JSON.stringify(updated)
-    );
+  /* 🗑 DELETE */
+  const deleteWish = async (id: string) => {
+    await deleteDoc(doc(db, "wishes", id));
   };
 
-  // PAGE 1
-  if (page === 1) {
+  /* 🚪 ENTER SITE + AUTO MUSIC FIX */
+  const enterSite = () => {
+    setOpen(true);
+    setMusicOn(true); // กดเข้าเว็บแล้วเพลงติดทันที
+  };
+
+  /* 🌸 PAGE 1 */
+  if (!open) {
     return (
-      <main style={styles.startPage}>
-        <div style={styles.glow}></div>
+      <>
+        <style>{globalStyle}</style>
 
-        <div
-          style={styles.startCard}
-          onClick={() => setPage(2)}
-        >
-          <div style={styles.small}>
-            MY BIRTHDAY
+        <main style={styles.startPage}>
+          <div style={styles.startCard} onClick={enterSite}>
+            <h1 style={{ fontSize: 40, color: "#ff4d88" }}>
+              🎂 22 MAY 2005
+            </h1>
+            <p>click to enter 💖</p>
           </div>
-
-          <h1 style={styles.big}>
-            22
-          </h1>
-
-          <div style={styles.year}>
-            MAY 2005
-          </div>
-
-          <p style={styles.enter}>
-            ✨ click to enter ✨
-          </p>
-        </div>
-      </main>
+        </main>
+      </>
     );
   }
 
+  /* 🌸 PAGE 2 */
   return (
     <>
-      <audio ref={audioRef} loop autoPlay>
-        <source
-          src="/happy.mp3"
-          type="audio/mp3"
-        />
+      <style>{globalStyle}</style>
+
+      {/* 🎵 AUDIO (FIXED FILE NAME) */}
+      <audio ref={audioRef} loop>
+        <source src="/happy.mp3" type="audio/mp3" />
       </audio>
 
-      <Confetti
-        width={width || 0}
-        height={height || 0}
-      />
+      {/* 🔊 BUTTON */}
+      <button style={styles.musicBtn} onClick={() => setMusicOn(!musicOn)}>
+        {musicOn ? "🔊 music on" : "🔇 music off"}
+      </button>
 
-      {/* sparkle cursor */}
-      <div
-        style={{
-          ...styles.sparkle,
-          left: cursor.x,
-          top: cursor.y,
-        }}
-      >
-        ✨
-      </div>
-
-      {/* petals */}
-      <div style={styles.petals}>
-        🌸 🌸 🌸 🌸 🌸 🌸 🌸
-      </div>
-
-      {/* floating hearts */}
-      {hearts && (
-        <div style={styles.heartEffect}>
-          💖 💕 🌸 ✨ 💖 💕
-        </div>
-      )}
+      <div style={styles.bg}></div>
 
       <main style={styles.container}>
-        <div style={styles.glowPink}></div>
-        <div style={styles.glowPurple}></div>
+        <h1 style={styles.title}>🎂 Birthday Guestbook</h1>
+        <p style={styles.subtitle}>leave your wishes 💖</p>
 
-        <div style={styles.cloud1}>
-          ☁️
-        </div>
+        {/* FORM */}
+        <div style={styles.form}>
+          <input
+            placeholder="your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={styles.input}
+          />
 
-        <div style={styles.cloud2}>
-          ☁️
-        </div>
+          <textarea
+            placeholder="write your wish..."
+            value={wish}
+            onChange={(e) => setWish(e.target.value)}
+            style={styles.textarea}
+          />
 
-        <div style={styles.cloud3}>
-          ☁️
-        </div>
-
-        {/* music player */}
-        <div style={styles.musicPlayer}>
-          <button
-            style={styles.musicButton}
-            onClick={() => {
-              if (!audioRef.current)
-                return;
-
-              if (musicOn) {
-                audioRef.current.pause();
-              } else {
-                audioRef.current.play();
-              }
-
-              setMusicOn(!musicOn);
-            }}
-          >
-            {musicOn
-              ? "🎵 music on"
-              : "🔇 music off"}
+          <button onClick={submitWish} style={styles.button}>
+            send 💌
           </button>
         </div>
 
-        {/* PAGE 2 */}
-        {page === 2 && (
-          <div style={styles.card}>
-            <h1 style={styles.title}>
-              💌 Leave a Wish
-            </h1>
+        {/* GRID */}
+        <div style={styles.grid}>
+          {wishes.map((w) => (
+            <div key={w.id} style={styles.card}>
+              <div style={styles.name}>{w.name}</div>
+              <div style={styles.msg}>{w.message}</div>
 
-            <p style={styles.subtitle}>
-              write something for me ✨
-            </p>
-
-            <div style={styles.wishSection}>
-              <input
-                type="text"
-                placeholder="your name..."
-                value={name}
-                onChange={(e) =>
-                  setName(e.target.value)
-                }
-                style={styles.input}
-              />
-
-              <textarea
-                placeholder="write something for me..."
-                value={wish}
-                onChange={(e) =>
-                  setWish(
-                    e.target.value
-                  )
-                }
-                style={styles.textarea}
-              />
-
-              <button
-                onClick={submitWish}
-                style={
-                  styles.sendButton
-                }
-              >
-                send ✨
-              </button>
-            </div>
-
-            <div style={styles.cake}>
-              🎂
-            </div>
-
-            <div style={styles.balloons}>
-              🎈 🎈 🎈 🎈 🎈
-            </div>
-          </div>
-        )}
-
-        {/* PAGE 3 */}
-        {page === 3 && (
-          <div style={styles.card}>
-            <h1 style={styles.title}>
-              💖 Birthday Wishes
-            </h1>
-
-            <p style={styles.subtitle}>
-              messages for me ✨
-            </p>
-
-            <div style={styles.cards}>
-              {wishes.map(
-                (item, index) => (
-                  <div
-                    key={index}
-                    style={
-                      styles.wishCard
-                    }
-                  >
-                    <div
-                      style={
-                        styles.cardName
-                      }
-                    >
-                      💖 {item.name}
-                    </div>
-
-                    <div
-                      style={
-                        styles.cardMessage
-                      }
-                    >
-                      {item.message}
-                    </div>
-
-                    {isAdmin && (
-                      <button
-                        onClick={() =>
-                          deleteWish(
-                            index
-                          )
-                        }
-                        style={
-                          styles.deleteButton
-                        }
-                      >
-                        delete
-                      </button>
-                    )}
-                  </div>
-                )
+              {admin && (
+                <button
+                  onClick={() => deleteWish(w.id)}
+                  style={styles.deleteBtn}
+                >
+                  delete
+                </button>
               )}
             </div>
-
-            <button
-              style={styles.nextButton}
-              onClick={() =>
-                setPage(2)
-              }
-            >
-              ✨ write another wish
-            </button>
-          </div>
-        )}
-
-        {/* popup */}
-        {showPopup && (
-          <div style={styles.popup}>
-            ✨ ขอบคุณ {popupName}
-            สำหรับคำอวยพร 💖
-            <br />
-            ขอให้ทุกคำอวยพร
-            <br />
-            ย้อนกลับไปหาคุณเช่นกัน 🌸
-          </div>
-        )}
+          ))}
+        </div>
       </main>
     </>
   );
 }
+
+/* 🌸 STYLE */
+const globalStyle = `
+body { margin:0; font-family:system-ui; overflow-x:hidden; }
+@keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-8px)} 100%{transform:translateY(0)} }
+`;
 
 const styles: any = {
   startPage: {
@@ -391,320 +175,120 @@ const styles: any = {
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    overflow: "hidden",
-    position: "relative",
-    background:
-      "linear-gradient(-45deg,#ffd6e7,#ffe8cc,#fff0f6,#f8dfff)",
-    backgroundSize: "400% 400%",
-    fontFamily: "sans-serif",
-  },
-
-  glow: {
-    position: "absolute",
-    width: 500,
-    height: 500,
-    background:
-      "rgba(255,192,203,0.4)",
-    borderRadius: "50%",
-    filter: "blur(120px)",
+    background: "linear-gradient(135deg,#ffd6e7,#fff0f5,#f8dfff)"
   },
 
   startCard: {
-    background:
-      "rgba(255,255,255,0.65)",
-    backdropFilter: "blur(18px)",
-    padding: "60px 80px",
-    borderRadius: 35,
-    textAlign: "center",
+    padding: 50,
+    borderRadius: 25,
+    background: "rgba(255,255,255,0.7)",
+    backdropFilter: "blur(15px)",
     cursor: "pointer",
-    zIndex: 2,
-    boxShadow:
-      "0 10px 40px rgba(255,105,180,0.25)",
+    textAlign: "center"
   },
 
-  small: {
-    color: "#ff6b81",
-    letterSpacing: 4,
-  },
-
-  big: {
-    fontSize: 140,
-    color: "#ff4d88",
-    margin: 0,
-  },
-
-  year: {
-    color: "#ff85a2",
-    fontSize: 30,
-    fontWeight: "bold",
-    letterSpacing: 4,
-  },
-
-  enter: {
-    marginTop: 20,
-    color: "#666",
+  bg: {
+    position: "fixed",
+    inset: 0,
+    background:
+      "radial-gradient(circle at 20% 20%, #ffd6e7, transparent 40%), radial-gradient(circle at 80% 30%, #ffe4f0, transparent 50%)",
+    filter: "blur(60px)",
+    zIndex: -1
   },
 
   container: {
-    minHeight: "100vh",
-    padding: 30,
-    position: "relative",
-    overflow: "hidden",
-    background:
-      "linear-gradient(-45deg,#fff0f6,#ffe5ec,#fff5f7,#ffe3f1)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    fontFamily: "sans-serif",
-  },
-
-  glowPink: {
-    position: "absolute",
-    width: 350,
-    height: 350,
-    background:
-      "rgba(255,182,193,0.35)",
-    borderRadius: "50%",
-    filter: "blur(120px)",
-    top: -50,
-    left: -50,
-  },
-
-  glowPurple: {
-    position: "absolute",
-    width: 300,
-    height: 300,
-    background:
-      "rgba(221,160,221,0.25)",
-    borderRadius: "50%",
-    filter: "blur(120px)",
-    bottom: -50,
-    right: -50,
-  },
-
-  cloud1: {
-    position: "absolute",
-    top: 80,
-    left: 40,
-    fontSize: 60,
-    opacity: 0.5,
-  },
-
-  cloud2: {
-    position: "absolute",
-    top: 180,
-    right: 60,
-    fontSize: 80,
-    opacity: 0.4,
-  },
-
-  cloud3: {
-    position: "absolute",
-    bottom: 120,
-    left: 100,
-    fontSize: 50,
-    opacity: 0.4,
-  },
-
-  petals: {
-    position: "fixed",
-    top: 0,
-    width: "100%",
-    textAlign: "center",
-    fontSize: 30,
-    opacity: 0.5,
-    pointerEvents: "none",
-  },
-
-  sparkle: {
-    position: "fixed",
-    pointerEvents: "none",
-    fontSize: 18,
-    zIndex: 9999,
-    transform:
-      "translate(-50%, -50%)",
-  },
-
-  musicPlayer: {
-    position: "fixed",
-    top: 20,
-    right: 20,
-    zIndex: 999,
-  },
-
-  musicButton: {
-    border: "none",
-    borderRadius: 20,
-    padding: "10px 18px",
-    background:
-      "rgba(255,255,255,0.7)",
-    backdropFilter: "blur(10px)",
-    cursor: "pointer",
-    color: "#ff4d88",
-  },
-
-  card: {
-    width: "100%",
-    maxWidth: 550,
-    background:
-      "rgba(255,255,255,0.7)",
-    backdropFilter: "blur(18px)",
-    borderRadius: 35,
-    padding: 35,
-    textAlign: "center",
-    boxShadow:
-      "0 10px 40px rgba(255,105,180,0.2)",
-    zIndex: 2,
+    padding: 25,
+    textAlign: "center"
   },
 
   title: {
+    fontSize: 40,
     color: "#ff4d88",
-    fontSize: 42,
+    animation: "float 3s infinite"
   },
 
   subtitle: {
-    color: "#ff85a2",
-    letterSpacing: 4,
-    marginBottom: 25,
+    color: "#888",
+    marginBottom: 20
   },
 
-  wishSection: {
-    marginTop: 10,
+  form: {
+    maxWidth: 500,
+    margin: "0 auto"
   },
 
   input: {
     width: "100%",
-    padding: 15,
+    padding: 12,
+    marginBottom: 10,
+    borderRadius: 14,
     border: "none",
-    borderRadius: 16,
-    marginBottom: 12,
-    outline: "none",
-    boxSizing: "border-box",
-    fontSize: 16,
-    background:
-      "rgba(255,255,255,0.85)",
+    background: "rgba(255,255,255,0.7)"
   },
 
   textarea: {
     width: "100%",
-    height: 120,
+    height: 110,
+    padding: 12,
+    borderRadius: 14,
     border: "none",
-    borderRadius: 20,
-    padding: 18,
-    resize: "none",
-    outline: "none",
-    background:
-      "rgba(255,255,255,0.85)",
-    fontSize: 16,
-    boxSizing: "border-box",
+    background: "rgba(255,255,255,0.7)"
   },
 
-  sendButton: {
-    marginTop: 15,
-    padding: "12px 30px",
+  button: {
+    marginTop: 10,
+    padding: "10px 22px",
+    borderRadius: 14,
     border: "none",
-    borderRadius: 15,
-    background: "#ff6b81",
+    background: "#ff4d88",
     color: "white",
-    cursor: "pointer",
-    fontSize: 16,
-    boxShadow:
-      "0 5px 15px rgba(255,105,180,0.3)",
+    cursor: "pointer"
   },
 
-  cards: {
-    marginTop: 30,
-    display: "flex",
-    flexDirection: "column",
-    gap: 15,
-    maxHeight: "500px",
-    overflowY: "auto",
+  grid: {
+    columnCount: 3,
+    columnGap: 16,
+    marginTop: 40
   },
 
-  wishCard: {
-    background:
-      "rgba(255,255,255,0.75)",
-    padding: 20,
-    borderRadius: 22,
-    textAlign: "left",
-    boxShadow:
-      "0 10px 30px rgba(255,105,180,0.15)",
-    backdropFilter: "blur(10px)",
-    border:
-      "1px solid rgba(255,255,255,0.5)",
+  card: {
+    background: "rgba(255,255,255,0.6)",
+    backdropFilter: "blur(18px)",
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 20
   },
 
-  cardName: {
+  name: {
     color: "#ff4d88",
-    fontWeight: "bold",
-    marginBottom: 8,
-    fontSize: 17,
+    fontWeight: "bold"
   },
 
-  cardMessage: {
-    color: "#555",
-    lineHeight: 1.7,
+  msg: {
+    color: "#444",
+    marginTop: 6
   },
 
-  deleteButton: {
-    marginTop: 12,
+  deleteBtn: {
+    marginTop: 10,
+    background: "#ff3b3b",
+    color: "white",
     border: "none",
-    padding: "8px 14px",
+    padding: "6px 10px",
+    borderRadius: 10,
+    cursor: "pointer"
+  },
+
+  musicBtn: {
+    position: "fixed",
+    top: 15,
+    right: 15,
+    padding: "10px 14px",
     borderRadius: 12,
-    background: "#ff4d6d",
-    color: "white",
-    cursor: "pointer",
-    fontSize: 13,
-  },
-
-  cake: {
-    marginTop: 30,
-    fontSize: 90,
-  },
-
-  balloons: {
-    marginTop: 20,
-    fontSize: 35,
-  },
-
-  nextButton: {
-    marginTop: 35,
-    padding: "14px 32px",
     border: "none",
-    borderRadius: 18,
-    background: "#ff6b81",
-    color: "white",
-    fontSize: 18,
+    background: "rgba(255,255,255,0.8)",
+    backdropFilter: "blur(10px)",
     cursor: "pointer",
-    boxShadow:
-      "0 5px 20px rgba(255,105,180,0.3)",
-  },
-
-  popup: {
-    position: "fixed",
-    top: "50%",
-    left: "50%",
-    transform:
-      "translate(-50%, -50%)",
-    background:
-      "rgba(255,255,255,0.95)",
-    padding: "30px 40px",
-    borderRadius: 25,
-    textAlign: "center",
-    color: "#ff4d88",
-    lineHeight: 1.8,
-    fontSize: 20,
-    zIndex: 999,
-    boxShadow:
-      "0 10px 40px rgba(255,105,180,0.3)",
-  },
-
-  heartEffect: {
-    position: "fixed",
-    top: "20%",
-    width: "100%",
-    textAlign: "center",
-    fontSize: 40,
-    zIndex: 999,
-  },
+    zIndex: 999
+  }
 };
